@@ -18,6 +18,8 @@ pub struct MultispectraCfg {
     pub overlap: f64,
     pub m: usize,
     pub b: usize,
+    pub mult: usize,
+    pub mult_diff: usize,
     pub no_odd: bool,
     pub odd_amp: f64,
 }
@@ -42,6 +44,8 @@ Modes:
             -o OVERLAP - Percentage overlap between each bin (Default 0.5)
             -m M - m for the linear equation used to calculate the minimum bin size (min = m * (128-x) + b) (Default: 32)
             -b B - b for the equation above (Default: 128)
+            --mult - Default bin size multiplier (Default: 36)
+            --mult_diff - Factor the bin size increases by it's below the minimum (Default: 12)
             --no-odd - Disable the odd symmetric windowed spectrogram
             --odd-amp AMP - Amplitude of the odd spectrogram (Default 0.166)"
     )
@@ -129,6 +133,8 @@ pub fn parse_args() -> Result<Arguments, String> {
     let overlap = get_num_or(&key_args, "-o", 0.5);
     let m = get_num_or(&key_args, "-m", 32);
     let b = get_num_or(&key_args, "-b", 128);
+    let mult = get_num_or(&key_args, "--mult", 36);
+    let mult_diff = get_num_or(&key_args, "--mult_diff", 12);
     let no_odd = switches.contains(&"--no-odd".to_string());
     let odd_amp = get_num_or(&key_args, "--odd-amp", 0.166);
 
@@ -136,6 +142,8 @@ pub fn parse_args() -> Result<Arguments, String> {
         overlap,
         m,
         b,
+        mult,
+        mult_diff,
         no_odd,
         odd_amp,
     };

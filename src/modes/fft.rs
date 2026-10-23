@@ -90,13 +90,13 @@ where
 {
     let mut note_data: crate::MidiFile = vec![vec![]; c_cfg.tracks];
     for note in range {
-        let mut mult = 36;
+        let mut mult = m_cfg.mult;
 
         let mut bins =
             c_cfg.samplerate as f64 / mid::piano_key_to_frequency(note as u8) * mult as f64;
         let minimum_bin_size = (m_cfg.m as f64 * (128.0 - note as f64)) + m_cfg.b as f64;
         while bins < minimum_bin_size {
-            mult += 12;
+            mult += m_cfg.mult_diff;
             bins = c_cfg.samplerate as f64 / mid::piano_key_to_frequency(note as u8) * mult as f64;
         }
 
