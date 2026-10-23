@@ -20,5 +20,5 @@ pub fn odd_symmetric(width: usize) -> Vec<f64> {
         let t = i as f64 / width as f64 * 2.0 - 1.0; // -1 to 1
         out[i] = t * E.powf(-(b.powi(2)) * t.powi(2)) / 0.282844; // Calculated max for b=2.5
     }
-    return out;
+    out
 }
