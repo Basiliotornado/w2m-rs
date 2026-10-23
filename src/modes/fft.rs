@@ -103,7 +103,7 @@ where
         let bin_r = bins.round() as usize;
         let overlap = (bins * m_cfg.overlap).round() as usize; // + bin_r / 4;
 
-        println!("Rendering note: {note}, {mult}, {bin_r}");
+        println!("Rendering note: {note}. mult:{mult}, bin_size:{bin_r}");
 
         let window = windows::blackman_harris_window(bin_r);
         let spec = Spectrogram::new(data, bin_r, overlap, c_cfg.samplerate, &window);

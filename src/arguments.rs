@@ -45,7 +45,7 @@ Modes:
             -m M - m for the linear equation used to calculate the minimum bin size (min = m * (128-x) + b) (Default: 32)
             -b B - b for the equation above (Default: 128)
             --mult - Default bin size multiplier (Default: 36)
-            --mult_diff - Number the mult increases by until it's above the minimum (Default: 12)
+            --mult_diff - Number the mult increases by until bin size is above the minimum (Default: 12)
             --no-odd - Disable the odd symmetric windowed spectrogram
             --odd-amp AMP - Amplitude of the odd spectrogram (Default 0.166)"
     )
