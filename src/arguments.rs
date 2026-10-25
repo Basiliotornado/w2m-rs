@@ -2,27 +2,32 @@ use crate::modes;
 
 static SWITCHES: &[&str] = &["--no-odd"];
 
+#[derive(Debug)]
 pub struct Arguments {
     pub mode: modes::Modes,
     pub path: String,
     pub output: String,
     pub ppqn: usize,
-    pub bpm: f64,
+    pub bpm: f32,
     pub tracks: usize,
     pub threads: usize,
     pub multispectra: MultispectraCfg,
+    pub zero_cross: ZeroCrossCfg,
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MultispectraCfg {
-    pub overlap: f64,
+    pub overlap: f32,
     pub m: usize,
     pub b: usize,
     pub mult: usize,
     pub mult_diff: usize,
     pub no_odd: bool,
-    pub odd_amp: f64,
+    pub odd_amp: f32,
 }
+
+#[derive(Debug, Default, Clone)]
+pub struct ZeroCrossCfg {}
 
 pub fn print_usage() {
     println!(
@@ -47,13 +52,16 @@ Modes:
             --mult - Default bin size multiplier (Default: 36)
             --mult_diff - Number the mult increases by until bin size is above the minimum (Default: 12)
             --no-odd - Disable the odd symmetric windowed spectrogram
-            --odd-amp AMP - Amplitude of the odd spectrogram (Default 0.166)"
+            --odd-amp AMP - Amplitude of the odd spectrogram (Default 0.166)
+    zero:
+        Runs a series of band pass filters to isolate specific frequency ranges, then creates a note for each cycle with its amplitude."
     )
 }
 
 pub fn get_mode(arg: &str) -> Result<modes::Modes, String> {
     match arg {
         "fft" => Ok(modes::Modes::Multispectra),
+        "zero" => Ok(modes::Modes::ZeroCross),
         _ => {
             print_usage();
             Err(format!("Invalid mode \"{}\"", arg))
@@ -88,8 +96,7 @@ pub fn parse_args() -> Result<Arguments, String> {
 
     let mut key = String::new();
     let mut positional = true;
-    for (i, arg) in args.enumerate() {
-        println!("{i}, {arg}");
+    for arg in args {
         if arg.len() > 1 && arg.as_bytes()[0] == b'-' {
             if SWITCHES.contains(&arg.as_str()) {
                 switches.push(arg);
@@ -109,7 +116,6 @@ pub fn parse_args() -> Result<Arguments, String> {
         }
     }
 
-    println!("{positional_args:?}, {key_args:?}");
     let pos_len = positional_args.len();
 
     let mode;
@@ -148,6 +154,8 @@ pub fn parse_args() -> Result<Arguments, String> {
         odd_amp,
     };
 
+    let zero_cross = ZeroCrossCfg {};
+
     let ppqn = get_num_or(&key_args, "--ppqn", 30000);
     let bpm = get_num_or(&key_args, "--bpm", 120.0);
     let tracks = get_num_or(&key_args, "--tracks", 16);
@@ -172,5 +180,6 @@ pub fn parse_args() -> Result<Arguments, String> {
         tracks,
         threads,
         multispectra,
+        zero_cross,
     })
 }

@@ -1,11 +1,11 @@
 // fn frequency_to_piano_key(freq: f64) -> usize {
 //     (12.0 * (freq / 440.0).log2() + 69.0).round() as usize
 // }
-pub fn piano_key_to_frequency(note: u8) -> f64 {
-    2.0f64.powf((note as f64 - 69.0) / 12.0) * 440.0
+pub fn piano_key_to_frequency(note: u8) -> f32 {
+    2.0f32.powf((note as f32 - 69.0) / 12.0) * 440.0
 }
 
-pub fn time_to_tick(time: f64, ppqn: f64, bpm: f64) -> f64 {
+pub fn time_to_tick(time: f32, ppqn: f32, bpm: f32) -> f32 {
     time * ppqn * bpm / 60.0
 }
 pub fn note_on<'a>(channel: u8, key: u8, vel: u8, delta: u32) -> midly::TrackEvent<'a> {

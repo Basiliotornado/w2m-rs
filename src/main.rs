@@ -20,7 +20,7 @@ struct ConvertCfg {
     samplerate: usize,
     channel: u8,
     ppqn: u16,
-    bpm: f64,
+    bpm: f32,
     threads: usize,
 }
 
@@ -35,7 +35,7 @@ struct Note {
 struct SoundData {
     samplerate: usize,
     channels: usize,
-    data: Vec<f64>,
+    data: Vec<f32>,
 }
 
 impl SoundData {
@@ -58,9 +58,18 @@ impl SoundData {
 // const TRACKS: usize = 16;
 // const PPQN: u16 = 30000; //8192;
 
-fn main() {
-    println!("{}", std::thread::available_parallelism().unwrap());
+fn get_notes(sound_data: Vec<f32>, args: &arguments::Arguments, cfg: &ConvertCfg) -> MidiFile {
+    match args.mode {
+        modes::Modes::Multispectra => {
+            modes::fft::Multispectra::new(sound_data, args.multispectra.clone()).to_notes(&cfg)
+        }
+        modes::Modes::ZeroCross => {
+            modes::zero_cross::ZeroCross::new(sound_data, args.zero_cross.clone()).to_notes(cfg)
+        }
+    }
+}
 
+fn main() {
     let args = match arguments::parse_args() {
         Ok(args) => args,
         Err(msg) => {
@@ -68,6 +77,8 @@ fn main() {
             return;
         }
     };
+
+    println!("\nSettings\n====\n{args:?}\n");
 
     let track_count = args.tracks;
     let ppqn = args.ppqn as u16;
@@ -112,14 +123,6 @@ fn main() {
         midi.tracks[0].push(mid::pan(0, 0));
         midi.tracks[track_count].push(mid::pan(1, 127));
 
-        let spec_l;
-        let spec_r;
-        match args.mode {
-            modes::Modes::Multispectra => {
-                spec_l = modes::fft::Multispectra::new(l, args.multispectra.clone());
-                spec_r = modes::fft::Multispectra::new(r, args.multispectra.clone())
-            }
-        };
         let mut cfg = ConvertCfg {
             tracks: track_count,
             samplerate: sound_data.samplerate,
@@ -129,9 +132,9 @@ fn main() {
             threads: args.threads,
         };
 
-        let mut notes_l = spec_l.to_notes(&cfg);
+        let mut notes_l = get_notes(l, &args, &cfg);
         cfg.channel = 1;
-        let mut notes_r = spec_r.to_notes(&cfg);
+        let mut notes_r = get_notes(r, &args, &cfg);
 
         for i in 0..track_count {
             note_data[i].append(&mut notes_l[i]);

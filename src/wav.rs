@@ -4,7 +4,7 @@ use std::io::BufReader;
 pub struct Wav {
     pub samplerate: u32,
     pub channels: u16,
-    pub data: Vec<f64>,
+    pub data: Vec<f32>,
 }
 
 impl Wav {
@@ -57,17 +57,17 @@ impl Wav {
         if block_size == u32::MAX {
             return Err("Invalid block size");
         }
-        let mut data = vec![0f64; samples as usize];
+        let mut data = vec![0f32; samples as usize];
 
         println!("BlockSize: {block_size}, Samples: {samples}");
 
         if audio_format == 1 {
             for i in 0..samples as usize {
-                data[i] = reader.read_type::<i16, 2>() as f64 / i16::MAX as f64;
+                data[i] = reader.read_type::<i16, 2>() as f32 / i16::MAX as f32;
             }
         } else if audio_format == 3 {
             for i in 0..samples as usize {
-                data[i] = reader.read_type::<f32, 4>() as f64;
+                data[i] = reader.read_type::<f32, 4>() as f32;
             }
         }
         // return Err("Hey");

@@ -1,5 +1,5 @@
 pub struct Raw {
-    pub data: Vec<f64>,
+    pub data: Vec<f32>,
 }
 
 impl Raw {
@@ -12,13 +12,13 @@ impl Raw {
         }
 
         let samples = input.len() / SIZE;
-        let mut data = vec![0f64; samples];
+        let mut data = vec![0f32; samples];
         // let reader = Reader::new(std::io::stdin());
 
         for i in 0..samples {
             data[i] = i16::from_le_bytes(input[i * SIZE..(i + 1) * SIZE].try_into().unwrap())
-                as f64
-                / T::MAX as f64;
+                as f32
+                / T::MAX as f32;
         }
 
         Self { data }
