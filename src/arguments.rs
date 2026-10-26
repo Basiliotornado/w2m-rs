@@ -27,7 +27,11 @@ pub struct MultispectraCfg {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct ZeroCrossCfg {}
+pub struct ZeroCrossCfg {
+    pub taps: usize,
+    pub filter_width: f32,
+    pub skip_m: f32,
+}
 
 pub fn print_usage() {
     println!(
@@ -54,7 +58,12 @@ Modes:
             --no-odd - Disable the odd symmetric windowed spectrogram
             --odd-amp AMP - Amplitude of the odd spectrogram (Default 0.166)
     zero:
-        Runs a series of band pass filters to isolate specific frequency ranges, then creates a note for each cycle with its amplitude."
+        Runs a series of band pass filters to isolate specific frequency ranges, then creates a note for each cycle with its amplitude.
+        options:
+            -t TAPS - Number of taps used for the filters (Default: 16384)
+            -w WIDTH - Width of the band pass. (freq +- freq * width)
+                       This is floored by samplerate/taps*2 (Default: 0.03)
+            -s MULT - Multiplier for cycle skipping. (cycles = note^2 / 1000) (Default: 1.0)"
     )
 }
 
@@ -86,7 +95,7 @@ pub fn parse_args() -> Result<Arguments, String> {
     let mut args = std::env::args();
 
     let program_path = args.next();
-    println!("{}", args.len());
+    println!("{} args given", args.len());
 
     // let mode = modes::Modes::Multispectra;
 
@@ -154,7 +163,15 @@ pub fn parse_args() -> Result<Arguments, String> {
         odd_amp,
     };
 
-    let zero_cross = ZeroCrossCfg {};
+    let taps = get_num_or(&key_args, "-t", 16384);
+    let filter_width = get_num_or(&key_args, "-w", 0.03);
+    let skip_m = get_num_or(&key_args, "-s", 1.0);
+
+    let zero_cross = ZeroCrossCfg {
+        taps,
+        filter_width,
+        skip_m,
+    };
 
     let ppqn = get_num_or(&key_args, "--ppqn", 30000);
     let bpm = get_num_or(&key_args, "--bpm", 120.0);

@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 
 mod arguments;
 mod mid;
@@ -10,6 +10,8 @@ mod windows;
 
 type MidiFile = Vec<Vec<Note>>;
 
+// I had higher hopes for my abilities
+// this is probably overkill
 trait ToNotes {
     fn to_notes(&self, config: &ConvertCfg) -> Vec<Vec<Note>>;
 }
@@ -58,6 +60,17 @@ impl SoundData {
 // const TRACKS: usize = 16;
 // const PPQN: u16 = 30000; //8192;
 
+fn progress_bar() {
+    print!("#");
+    let _ = std::io::stdout().flush();
+}
+
+fn progress_header(text: &str) {
+    println!("\n=== {text}");
+    (0..128).for_each(|_| print!("_"));
+    println!(" v");
+}
+
 fn get_notes(sound_data: Vec<f32>, args: &arguments::Arguments, cfg: &ConvertCfg) -> MidiFile {
     match args.mode {
         modes::Modes::Multispectra => {
@@ -87,7 +100,7 @@ fn main() {
         println!("Using stdin, assuming 2 channel s16le 48khz.");
         let mut stdin = Vec::new();
         std::io::stdin().lock().read_to_end(&mut stdin).unwrap();
-        SoundData::from_raw(raw::Raw::new_i16(stdin), 48000, 2)
+        SoundData::from_raw(raw::Raw::new_i16(stdin), 48000, 1)
     } else {
         SoundData::from_wav(wav::Wav::load(std::path::Path::new(&args.path)).unwrap())
     };
@@ -101,7 +114,14 @@ fn main() {
 
     let mut note_data: Vec<Vec<Note>> = vec![vec![]; track_count];
 
-    println!("{}, {}", sound_data.data.len(), sound_data.samplerate);
+    let mut cfg = ConvertCfg {
+        tracks: track_count,
+        samplerate: sound_data.samplerate,
+        channel: 0,
+        ppqn: ppqn,
+        bpm: args.bpm,
+        threads: args.threads,
+    };
 
     if sound_data.channels == 2 {
         let mut l = vec![0.0; sound_data.data.len() / 2];
@@ -113,28 +133,20 @@ fn main() {
         }
 
         note_data.append(&mut note_data.clone());
-        midi.tracks.append(&mut vec![
-            vec![
-                mid::note_on(1, 0, 1, 0),
-                mid::note_off(1, 0, 0, 1)
-            ];
-            track_count
-        ]);
+        midi.tracks.append(&mut vec![vec![]; track_count]);
         midi.tracks[0].push(mid::pan(0, 0));
         midi.tracks[track_count].push(mid::pan(1, 127));
 
-        let mut cfg = ConvertCfg {
-            tracks: track_count,
-            samplerate: sound_data.samplerate,
-            channel: 0,
-            ppqn: ppqn,
-            bpm: args.bpm,
-            threads: args.threads,
-        };
+        progress_header("Left channel");
 
         let mut notes_l = get_notes(l, &args, &cfg);
+        println!(" done\n");
+
+        progress_header("Right channel");
+
         cfg.channel = 1;
         let mut notes_r = get_notes(r, &args, &cfg);
+        println!(" done\n");
 
         for i in 0..track_count {
             note_data[i].append(&mut notes_l[i]);
@@ -143,38 +155,50 @@ fn main() {
             note_data[i + track_count].append(&mut notes_r[i]);
         }
 
-        println!("{} notes", note_data.len());
+        println!(
+            "{} notes",
+            note_data
+                .iter()
+                .map(|x| x.len() / 2)
+                .reduce(|acc, x| acc + x)
+                .unwrap()
+        );
+    } else if sound_data.channels == 1 {
+        progress_header("Progress");
+        note_data = get_notes(sound_data.data, &args, &cfg);
+        println!(" done\n");
+    }
 
-        for track in note_data.iter_mut() {
-            track.sort_unstable_by_key(|a| a.time);
+    for track in note_data.iter_mut() {
+        track.sort_unstable_by_key(|a| a.time);
 
-            for i in (1..track.len()).rev() {
-                track[i].time -= track[i - 1].time;
-            }
+        for i in (1..track.len()).rev() {
+            track[i].time -= track[i - 1].time;
         }
-        for track in 0..track_count * 2 {
-            for note in &note_data[track] {
-                if note.vel > 0 {
-                    midi.tracks[track].push(mid::note_on(
-                        note.channel,
-                        note.note,
-                        note.vel,
-                        note.time as u32,
-                    ));
-                } else {
-                    midi.tracks[track].push(mid::note_off(
-                        note.channel,
-                        note.note,
-                        note.vel,
-                        note.time as u32,
-                    ));
-                }
+    }
+
+    for (i, track) in note_data.iter().enumerate() {
+        for note in track {
+            if note.vel > 0 {
+                midi.tracks[i].push(mid::note_on(
+                    note.channel,
+                    note.note,
+                    note.vel,
+                    note.time as u32,
+                ));
+            } else {
+                midi.tracks[i].push(mid::note_off(
+                    note.channel,
+                    note.note,
+                    note.vel,
+                    note.time as u32,
+                ));
             }
         }
     }
 
     println!(
-        "{:?}",
+        "\nEvent count: {:?}",
         midi.tracks.iter().map(|x| x.len()).collect::<Vec<usize>>()
     );
 

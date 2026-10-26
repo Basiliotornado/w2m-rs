@@ -1,7 +1,7 @@
 use crate::{mid, windows};
 use rustfft::{num_complex::Complex, FftPlanner};
 
-pub fn f64_vec_to_complex(vec: &[f32]) -> Vec<Complex<f32>> {
+pub fn f32_vec_to_complex(vec: &[f32]) -> Vec<Complex<f32>> {
     vec.iter().map(|&e| Complex { re: e, im: 0.0 }).collect()
 }
 
@@ -68,9 +68,7 @@ impl crate::ToNotes for Spectrogram {
     fn to_notes(&self, c_cfg: &crate::ConvertCfg) -> crate::MidiFile {
         let mut note_data: crate::MidiFile = vec![vec![]; c_cfg.tracks];
 
-        for line in self.data {
-            // note_data
-        }
+        for line in &self.data {}
 
         note_data
     }
@@ -85,7 +83,7 @@ pub struct Multispectra {
 impl Multispectra {
     pub fn new(sound_data: Vec<f32>, cfg: crate::arguments::MultispectraCfg) -> Self {
         Self {
-            sound_data: f64_vec_to_complex(&sound_data),
+            sound_data: f32_vec_to_complex(&sound_data),
             cfg,
         }
     }
@@ -115,7 +113,7 @@ where
         let bin_r = bins.round() as usize;
         let overlap = (bins * m_cfg.overlap).round() as usize; // + bin_r / 4;
 
-        println!("Rendering note: {note}. mult:{mult}, bin_size:{bin_r}");
+        // println!("Rendering note: {note}. mult:{mult}, bin_size:{bin_r}");
 
         let window = windows::blackman_harris_window(bin_r);
         let spec = Spectrogram::new(data, bin_r, overlap, c_cfg.samplerate, &window);
@@ -160,6 +158,7 @@ where
                 channel: c_cfg.channel,
             });
         }
+        crate::progress_bar();
     }
     note_data
 }

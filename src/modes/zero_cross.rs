@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
 
-fn sinc(size: usize, f: f32, sr: f32) -> Vec<f32> {
-    // let output = vec![0.0; size];
+use crate::modes;
 
+fn sinc(size: usize, f: f32, sr: f32) -> Vec<f32> {
     (0..size)
         .map(|x| (x as f32 - (size as f32 / 2.0).floor()) * 2.0 / sr * f * PI)
         .map(|x| match x {
@@ -10,7 +10,6 @@ fn sinc(size: usize, f: f32, sr: f32) -> Vec<f32> {
             _ => x.sin() / x,
         })
         .collect::<Vec<f32>>()
-    // output
 }
 
 fn convolve(a: &[f32], b: &[f32]) -> Vec<f32> {
@@ -97,26 +96,76 @@ fn filt(signal: &[f32], filter: &[f32]) -> Vec<f32> {
     output
 }
 
-fn filtfilt(data: &[f32], filter: &[f32]) -> Vec<f32> {
-    let mut output = filt(data, filter);
-    output.reverse();
-    output = filt(&output, filter);
-    output.reverse();
+fn filt_ola(signal: &[f32], filter: &[f32]) -> Vec<f32> {
+    let filt_len = filter.len();
+    let buffer_len = (filt_len + 1).next_power_of_two();
+    let ola_len = buffer_len - filt_len;
 
-    output
+    let mut output = Vec::with_capacity(signal.len());
+    let fac = buffer_len as f32;
+
+    let mut planner = rustfft::FftPlanner::new();
+    let fft_plan = planner.plan_fft_forward(buffer_len);
+    let fft_plan_i = planner.plan_fft_inverse(buffer_len);
+
+    let mut filt = crate::modes::fft::f32_vec_to_complex(filter);
+    filt.append(&mut vec![
+        rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
+        buffer_len - filt_len
+    ]);
+    fft_plan.process(&mut filt);
+
+    let mut sig_buf;
+    for i in 0..(signal.len() - 1) / filt_len + 1 {
+        if (i + 1) * filt_len < signal.len() {
+            sig_buf =
+                crate::modes::fft::f32_vec_to_complex(&signal[i * filt_len..(i + 1) * filt_len]);
+        } else {
+            sig_buf = crate::modes::fft::f32_vec_to_complex(&signal[(i) * filt_len..]);
+        }
+        sig_buf.append(&mut vec![
+            rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
+            buffer_len - sig_buf.len()
+        ]);
+        fft_plan.process(&mut sig_buf);
+
+        sig_buf
+            .iter_mut()
+            .zip(&mut filt.iter_mut())
+            .for_each(|x| *x.0 *= *x.1);
+
+        fft_plan_i.process(&mut sig_buf);
+        sig_buf.iter_mut().for_each(|x| x.im = 0.0);
+
+        let output_len = output.len();
+        if output_len >= ola_len {
+            for i in 0..ola_len {
+                output[output_len - ola_len + i] += sig_buf[i].re / fac;
+            }
+            output.append(
+                &mut sig_buf[ola_len..]
+                    .iter()
+                    .map(|x| x.re / fac)
+                    .collect::<Vec<f32>>(),
+            );
+        } else {
+            output.append(&mut sig_buf.iter().map(|x| x.re / fac).collect::<Vec<f32>>())
+        }
+    }
+
+    output[0..signal.len()].to_vec()
 }
 
-fn filtfilt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
+fn filt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
     let s_len = signal.len();
     let f_len = filter.len();
-    // let mut output = vec![0.0; signal.len()];
 
     let mut planner = rustfft::FftPlanner::new();
     let fft_plan = planner.plan_fft_forward(s_len);
     let fft_plan_i = planner.plan_fft_inverse(s_len);
 
-    let mut sig = crate::modes::fft::f64_vec_to_complex(signal);
-    let mut fil = crate::modes::fft::f64_vec_to_complex(filter);
+    let mut sig = crate::modes::fft::f32_vec_to_complex(signal);
+    let mut fil = crate::modes::fft::f32_vec_to_complex(filter);
 
     fil.append(&mut vec![
         rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
@@ -126,23 +175,67 @@ fn filtfilt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
     fft_plan.process(&mut sig);
     fft_plan.process(&mut fil);
 
-    let _ = sig
-        .iter_mut()
+    sig.iter_mut()
         .zip(&mut fil.iter_mut())
-        .map(|x| *x.0 *= *x.1)
-        .collect::<Vec<_>>();
+        .for_each(|x| *x.0 *= *x.1);
 
     fft_plan_i.process(&mut sig);
 
-    let _ = sig.iter_mut().map(|x| x.im = 0.0).collect::<Vec<_>>();
+    let fac = s_len as f32;
+    sig.iter().map(|x| x.re / fac).collect()
+}
+
+fn filtfilt(data: &[f32], filter: &[f32]) -> Vec<f32> {
+    let mut output = filt(data, filter);
+    output.reverse();
+    output = filt(&output, filter);
+    output.reverse();
+
+    output
+}
+
+fn filtfilt_ola(data: &[f32], filter: &[f32]) -> Vec<f32> {
+    let mut output = filt_ola(data, filter);
+    output.reverse();
+    output = filt_ola(&output, filter);
+    output.reverse();
+
+    output
+}
+
+fn filtfilt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
+    let s_len = signal.len();
+    let f_len = filter.len();
+
+    let mut planner = rustfft::FftPlanner::new();
+    let fft_plan = planner.plan_fft_forward(s_len);
+    let fft_plan_i = planner.plan_fft_inverse(s_len);
+
+    let mut sig = crate::modes::fft::f32_vec_to_complex(signal);
+    let mut fil = crate::modes::fft::f32_vec_to_complex(filter);
+
+    fil.append(&mut vec![
+        rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
+        s_len - f_len
+    ]);
+
+    fft_plan.process(&mut sig);
+    fft_plan.process(&mut fil);
+
+    sig.iter_mut()
+        .zip(&mut fil.iter_mut())
+        .for_each(|x| *x.0 *= *x.1);
+
+    fft_plan_i.process(&mut sig);
+
+    sig.iter_mut().for_each(|x| x.im = 0.0);
     sig.reverse();
 
     fft_plan.process(&mut sig);
-    let _ = sig
-        .iter_mut()
+    sig.iter_mut()
         .zip(&mut fil.iter_mut())
-        .map(|x| *x.0 *= *x.1)
-        .collect::<Vec<_>>();
+        .for_each(|x| *x.0 *= *x.1);
+
     fft_plan_i.process(&mut sig);
     sig.reverse();
 
@@ -153,44 +246,52 @@ fn filtfilt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
 #[derive(Clone)]
 struct Cross {
     index: usize,
-    vel: u8,
-    track: usize,
+    amp: f32,
     note: u8,
 }
 
-fn notes_range<T>(data: &[f32], range: T, c_cfg: &crate::ConvertCfg) -> Vec<Cross>
+fn notes_range<T>(
+    data: &[f32],
+    range: T,
+    c_cfg: &crate::ConvertCfg,
+    z_cfg: &crate::arguments::ZeroCrossCfg,
+) -> Vec<Cross>
 where
     T: Iterator<Item = usize>,
 {
     let mut crosses = vec![];
+
     for note in range {
-        println!("Doing note {note}");
         let frequency = crate::mid::piano_key_to_frequency(note as u8);
 
-        let skip = note.pow(2) / 1000;
-        // let skip = 1;
+        let skip = (((note.pow(2) / 1000) as f32 * z_cfg.skip_m) as usize).clamp(1, usize::MAX);
 
-        let band_filt = bandpass(4096 * 4, frequency, 0.05, c_cfg.samplerate as f32);
-        let filtered = filtfilt_fft(&data, &band_filt);
+        let band_filt = bandpass(
+            z_cfg.taps,
+            frequency,
+            z_cfg.filter_width,
+            c_cfg.samplerate as f32,
+        );
+        let filtered = filtfilt_ola(&data, &band_filt);
+
         let mut sign = true;
-        let mut count = 0;
         let mut amp = 0.0;
+        let mut count = 0;
+        let mut avg = 0.0;
         let mut abs;
         for (i, sample) in filtered.iter().enumerate() {
             if sample.is_sign_negative() != sign {
                 sign = sample.is_sign_negative();
                 count += 1;
+                avg += amp;
+                amp = 0.0;
                 if sign && ((count / 2) >= skip) {
-                    let vel = ((amp * 127.99 * 1.5) as u8).clamp(0, 127);
-                    let track =
-                        (amp * c_cfg.tracks as f32).clamp(0.0, c_cfg.tracks as f32 - 1.0) as usize;
-                    amp = 0.0;
                     crosses.push(Cross {
                         index: i,
-                        vel,
-                        track,
+                        amp: avg / count as f32,
                         note: note as u8,
                     });
+                    avg = 0.0;
                     count = 0;
                 }
             }
@@ -199,6 +300,7 @@ where
                 amp = abs;
             }
         }
+        crate::progress_bar();
     }
     crosses
 }
@@ -222,7 +324,7 @@ impl crate::ToNotes for ZeroCross {
 
         let mut crosses = vec![];
 
-        let threads = 8;
+        let threads = c_cfg.threads;
         let batch_size = 128 / threads;
 
         let data = &self.sound_data;
@@ -238,7 +340,7 @@ impl crate::ToNotes for ZeroCross {
                     } else {
                         128
                     };
-                    return notes_range(data, start..end, cfg);
+                    return notes_range(data, start..end, cfg, &self.cfg);
                     // i tried (i..128).step_by(threads), but i * batch_size..(i + 1) * batch_size is faster?
                 }));
             }
@@ -248,12 +350,23 @@ impl crate::ToNotes for ZeroCross {
             }
         });
 
+        let max_amp = crosses
+            .iter()
+            .map(|x| x.amp)
+            .reduce(|acc, x| if x > acc { x } else { acc })
+            .unwrap();
+
         for i in 0..crosses.len() - 1 {
             let cross = &crosses[i];
-            if cross.vel < 1 {
+            let amp = (cross.amp / max_amp).sqrt();
+            let vel = ((amp * 127.99) as u8).clamp(0, 127);
+            let track = ((amp * c_cfg.tracks as f32) as usize).clamp(0, c_cfg.tracks - 1);
+
+            // println!("{vel}, {track}");
+            if vel < 1 {
                 continue;
             }
-            note_data[cross.track].push(crate::Note {
+            note_data[track].push(crate::Note {
                 channel: c_cfg.channel,
                 time: crate::mid::time_to_tick(
                     cross.index as f32 / sr,
@@ -261,10 +374,10 @@ impl crate::ToNotes for ZeroCross {
                     c_cfg.bpm as f32,
                 ) as usize,
                 note: cross.note,
-                vel: cross.vel,
+                vel: vel,
             });
             let cross2 = &crosses[i + 1];
-            note_data[cross.track].push(crate::Note {
+            note_data[track].push(crate::Note {
                 channel: c_cfg.channel,
                 time: crate::mid::time_to_tick(
                     cross2.index as f32 / sr,
