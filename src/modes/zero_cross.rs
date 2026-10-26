@@ -65,7 +65,10 @@ fn bandpass(taps: usize, f: f32, width: f32, sr: f32) -> Vec<f32> {
         a[i] *= -1.0;
     }
 
-    let mut c = convolve(&a, &b);
+    // println!("{:?}", convolve(&a, &b));
+    // println!("{:?}", filt_fft(&a, &b));
+
+    let mut c = filt_fft(&a, &b);
 
     let window = crate::windows::hann(taps);
 
@@ -153,12 +156,12 @@ fn filt_ola(signal: &[f32], filter: &[f32]) -> Vec<f32> {
         }
     }
 
-    output[0..signal.len()].to_vec()
+    output[ola_len / 2..signal.len() + ola_len / 2].to_vec()
 }
 
 fn filt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
-    let s_len = signal.len();
-    let f_len = filter.len();
+    let s_len = signal.len() * 2;
+    let f_len = filter.len() * 2;
 
     let mut planner = rustfft::FftPlanner::new();
     let fft_plan = planner.plan_fft_forward(s_len);
@@ -169,7 +172,11 @@ fn filt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
 
     fil.append(&mut vec![
         rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
-        s_len - f_len
+        s_len - sig.len()
+    ]);
+    sig.append(&mut vec![
+        rustfft::num_complex::Complex { re: 0.0, im: 0.0 };
+        f_len - filter.len()
     ]);
 
     fft_plan.process(&mut sig);
@@ -181,8 +188,12 @@ fn filt_fft(signal: &[f32], filter: &[f32]) -> Vec<f32> {
 
     fft_plan_i.process(&mut sig);
 
+    let even = (signal.len() % 2) ^ 1;
     let fac = s_len as f32;
-    sig.iter().map(|x| x.re / fac).collect()
+    sig[s_len / 4 - even..s_len / 2 + s_len / 4 - even]
+        .iter()
+        .map(|x| x.re / fac)
+        .collect()
 }
 
 fn filtfilt(data: &[f32], filter: &[f32]) -> Vec<f32> {
